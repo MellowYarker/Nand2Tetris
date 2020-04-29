@@ -1,0 +1,97 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/02/ALU.hdl
+
+/**
+ * The ALU (Arithmetic Logic Unit).
+ * Computes one of the following functions:
+ * x+y, x-y, y-x, 0, 1, -1, x, y, -x, -y, !x, !y,
+ * x+1, y+1, x-1, y-1, x&y, x|y on two 16-bit inputs, 
+ * according to 6 input bits denoted zx,nx,zy,ny,f,no.
+ * In addition, the ALU computes two 1-bit outputs:
+ * if the ALU output == 0, zr is set to 1; otherwise zr is set to 0;
+ * if the ALU output < 0, ng is set to 1; otherwise ng is set to 0.
+ */
+
+// Implementation: the ALU logic manipulates the x and y inputs
+// and operates on the resulting values, as follows:
+// if (zx == 1) set x = 0        // 16-bit constant
+// if (nx == 1) set x = !x       // bitwise not
+// if (zy == 1) set y = 0        // 16-bit constant
+// if (ny == 1) set y = !y       // bitwise not
+// if (f == 1)  set out = x + y  // integer 2's complement addition
+// if (f == 0)  set out = x & y  // bitwise and
+// if (no == 1) set out = !out   // bitwise not
+// if (out == 0) set zr = 1
+// if (out < 0) set ng = 1
+
+CHIP ALU {
+    IN  
+        x[16], y[16],  // 16-bit inputs        
+        zx, // zero the x input?
+        nx, // negate the x input?
+        zy, // zero the y input?
+        ny, // negate the y input?
+        f,  // compute out = x + y (if 1) or x & y (if 0)
+        no; // negate the out output?
+
+    OUT 
+        out[16], // 16-bit output
+        zr, // 1 if (out == 0), 0 otherwise
+        ng; // 1 if (out < 0),  0 otherwise
+
+    PARTS:
+    // Put you code here:
+    
+    // zx
+    /*  If zx is 1, set all bits to 0, otherwise do nothing. 
+        Note that both innerX and innerX2 have the same value.
+    */
+    Mux16 (a=x, b=false, sel=zx, out=innerX, out=innerX2);
+    
+    // nx
+    /* If nx is 1, negate x.*/
+    Not16 (in=innerX2, out=notInnerX);
+    Mux16 (a=innerX, b=notInnerX, sel=nx, out=innerXI, out=innerXII);
+ 
+    // zy
+    Mux16 (a=y, b=false, sel=zy, out=innerY, out=innerY2);
+
+    // ny
+    Not16 (in=innerY2, out=notInnerY2);
+    Mux16 (a=innerY, b=notInnerY2, sel=ny, out=innerYI, out=innerYII);
+
+    // f
+    /* Note that innerXI == innerXII. We compute both operations and then select the one we want. */
+    Add16 (a=innerXI, b=innerYI, out=addXY);
+    And16 (a=innerXII, b=innerYII, out=andXY);
+
+    Mux16 (a=andXY, b=addXY, sel=f, out=fOut, out=fOut2);
+
+    // no
+    /*  To determine the zr and ng bits, we have to do some type of summary statistic on all the bits.
+        One gate that can do this is Or8Way, which takes 8 bits and gives back just 1.
+
+        Since our output has 16 bits, we will need to split it in half via out[0..7] and out[8..15].
+        
+        For ng, we only need to check the leftmost bit of the output.
+            -if 0: it's non-negative
+            -else if 1: it's negative (two's compliment!)
+    */
+    Not16 (in=fOut2, out=notfOut);
+    Mux16 (a=fOut, b=notfOut, sel=no, out=out, out[0..7]=Out1, out[8..15]=Out2, out[15]=sign);
+    
+    // zr
+    /* Using DeMorgan's law here. Peep the OVO owl ;)
+        ~(0 V 0) == (1 ^ 1) == 1
+    */
+    Or8Way (in=Out1, out=OrOut1);
+    Or8Way (in=Out2, out=OrOut2);
+
+    Or (a=OrOut1, b=OrOut2, out=fin);
+    Not (in=fin, out=zr);
+
+    // ng
+    Or (a=false, b=sign, out=ng);
+}

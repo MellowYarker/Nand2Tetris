@@ -1,0 +1,129 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/05/CPU.hdl
+
+/**
+ * The Hack CPU (Central Processing unit), consisting of an ALU,
+ * two registers named A and D, and a program counter named PC.
+ * The CPU is designed to fetch and execute instructions written in 
+ * the Hack machine language. In particular, functions as follows:
+ * 
+ * Executes the inputted instruction according to the Hack machine 
+ * language specification. The D and A in the language specification
+ * refer to CPU-resident registers, while M refers to the external
+ * memory location addressed by A, i.e. to Memory[A]. The inM input 
+ * holds the value of this location. If the current instruction needs 
+ * to write a value to M, the value is placed in outM, the address 
+ * of the target location is placed in the addressM output, and the 
+ * writeM control bit is asserted. (When writeM==0, any value may 
+ * appear in outM). The outM and writeM outputs are combinational: 
+ * they are affected instantaneously by the execution of the current 
+ * instruction. The addressM and pc outputs are clocked: although they 
+ * are affected by the execution of the current instruction, they commit 
+ * to their new values only in the next time step. If reset==1 then the 
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather 
+ * than to the address resulting from executing the current instruction. 
+ */
+
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    // Put your code here:
+
+    /*  Given instruction ixxaccccccdddjjj:
+            - i: opcode, the instruction type. 
+                > 0 = A-instruction (address)
+                > 1 = C-instruction (compute)
+            
+            - x: unused for C-instruction
+            - a: specifies whether the ALU should operate on the A-register or M-RAM input.
+            - c's: control bits for the ALU
+            - d: destination bits, these specify where the output will be directed.
+            - j: jump bits, which are fed to the PC.
+
+        If we get 0 in the opcode, i.e an A-instruction, the entire 16-bit value 
+        should be loaded into the A register.
+
+        Otherwise, we use all the other bits.
+    */
+
+    /*  If the instruction from the memory is an A-instruction, the leftmost bit will be 0.
+        Otherwise, it's a C-instruction, so we should load the ALU address output instead.
+    */
+    Mux16 (a=instruction, b=ALUoutA, sel=instruction[15], out=ARegisterIn);
+    Mux (a=true, b=instruction[5], sel=instruction[15], out=loadA); /* Always load if it's an A-instruction. */
+
+    /*  Output of A-Register goes to 3 wires.
+     *      1. select either A reg or M memory
+     *      2. program counter as input
+     *      3. addressM CPU output.
+     *   Also note the load bit is one of the destination bits of the instruction!
+     */
+    ARegister (in=ARegisterIn, load=loadA, out=ARegisterStateI, out=ARegisterStateII, out[0..14]=addressM);
+
+    /*  Select either the A-register or the program/data memory.
+        Load bit comes from 'a' bit in instruction. */
+    Mux16 (a=ARegisterStateI, b=inM, sel=instruction[12], out=AorMRegisterState); /* One of the ALU inputs. */
+
+    Mux16 (a=DRegisterStateI, b=ALUoutD, sel=instruction[15], out=DregisterInput);
+    DRegister (in=DregisterInput, load=instruction[4], out=DRegisterState, out=DRegisterStateI);
+
+    ALU (x=DRegisterState, y=AorMRegisterState, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=outM, out=ALUoutD, out=ALUoutA, zr=zr1, zr=zr2, zr=zr3, ng=ng1, ng=ng2, ng=ng3);
+
+    /* Only store the M destination bit in writeM if we got a C-Instruction. */
+    Mux (a=false, b=true, sel=instruction[15], out=instType);
+    Mux (a=false, b=instType, sel=instruction[3], out=writeM);
+
+    /* Update the program counter! */
+    /*  Suppose we have destination bits ddd
+        000 = increment, load = 0
+        001 = conditional: load = 1 if outM  > 0.  i.e zr = 0 and ng = 0
+        010 = conditional: load = 1 if outM  = 0.  i.e zr = 1
+        011 = conditional: load = 1 if outM >= 0.  i.e ng = 0
+        100 = conditional: load = 1 if outM  < 0.  i.e zr = 0 and ng = 1
+        101 = conditional: load = 1 if outM != 0.  i.e zr = 0
+        110 = conditional: load = 1 if outM <= 0.  i.e zr = 1 or ng = 1
+        111 = unconditional goto, load = 1
+    */
+
+    /* 001: JGT (Jump Greater Than) */
+    Not (in=zr1, out=notZrA, out=notZrB, out=notZrC);
+    Not (in=ng1, out=notNgA, out=notNgB);
+    And (a=notZrA, b=notNgA, out=JGT);
+
+    /* 010: JEQ (Jump Equal To) */
+    And (a=zr2, b=true, out=JEQ);
+
+    /* 011: JGE (Jump Greater Than or Equal To) */
+    And (a=notNgB, b=true, out=JGE);
+
+    /* 100: JLT (Jump Less Than) */
+    And (a=notZrB, b=ng2, out=JLT);
+
+    /* 101: JNE (Jump Not Equal To )*/
+    And (a=notZrC, b=true, out=JNE);
+
+    /* 110: JLE (Jump Less than Equal to) */
+    Or (a=zr3, b=ng3, out=JLE);
+
+    /* Obtain the PC load value based on the JUMP bits. */
+    Mux8Way16 (a=false, b[15]=JGT, c[15]=JEQ, d[15]=JGE, e[15]=JLT, f[15]=JNE, g[15]=JLE, h[15]=true, sel=instruction[0..2], out[15]=jump);
+
+    /* PCLoad will be jump if we had a C-instruction. */
+    Mux (a=false, b=jump, sel=instruction[15], out=PCLoad, out=inc);
+    Not (in=inc, out=increment); /* If load is 0, increment is 1. */
+
+    PC (in=ARegisterStateII, load=PCLoad, inc=increment, reset=reset, out[0..14]=pc);
+}

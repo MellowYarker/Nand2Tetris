@@ -1,0 +1,31 @@
+// This file is part of the materials accompanying the book 
+// "The Elements of Computing Systems" by Nisan and Schocken, 
+// MIT Press. Book site: www.idc.ac.il/tecs
+// File name: projects/03/b/RAM512.hdl
+
+/**
+ * Memory of 512 registers, each 16 bit-wide. Out holds the value
+ * stored at the memory location specified by address. If load==1, then 
+ * the in value is loaded into the memory location specified by address 
+ * (the loaded value will be emitted to out from the next time step onward).
+ */
+
+CHIP RAM512 {
+    IN in[16], load, address[9];
+    OUT out[16];
+
+    PARTS:
+    // Put your code here:
+    DMux8Way (in=load, sel=address[6..8], a=Unit0, b= Unit1, c=Unit2, d=Unit3, e=Unit4, f=Unit5, g=Unit6, h=Unit7);
+
+    RAM64 (in=in, load=Unit0, address=address[0..5], out=Unit0out);
+    RAM64 (in=in, load=Unit1, address=address[0..5], out=Unit1out);
+    RAM64 (in=in, load=Unit2, address=address[0..5], out=Unit2out);
+    RAM64 (in=in, load=Unit3, address=address[0..5], out=Unit3out);
+    RAM64 (in=in, load=Unit4, address=address[0..5], out=Unit4out);
+    RAM64 (in=in, load=Unit5, address=address[0..5], out=Unit5out);
+    RAM64 (in=in, load=Unit6, address=address[0..5], out=Unit6out);
+    RAM64 (in=in, load=Unit7, address=address[0..5], out=Unit7out);
+
+    Mux8Way16 (a=Unit0out, b= Unit1out, c=Unit2out, d=Unit3out, e=Unit4out, f=Unit5out, g=Unit6out, h=Unit7out, sel=address[6..8], out=out);
+}

@@ -1,0 +1,33 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/03/a/RAM64.hdl
+
+/**
+ * Memory of 64 registers, each 16 bit-wide. Out holds the value
+ * stored at the memory location specified by address. If load==1, then 
+ * the in value is loaded into the memory location specified by address 
+ * (the loaded value will be emitted to out from the next time step onward).
+ */
+
+CHIP RAM64 {
+    IN in[16], load, address[6];
+    OUT out[16];
+
+    PARTS:
+    // Put your code here:
+    /* 3 leftmost address bits specify the RAM8 unit. */
+    DMux8Way (in=load, sel=address[3..5], a=UnitA, b=UnitB, c=UnitC, d=UnitD, e=UnitE, f=UnitF, g=UnitG, h=UnitH);
+    
+    /* Next 3 address bits specify the register in the desired RAM8 unit. */
+    RAM8 (in=in, load=UnitA, address=address[0..2], out=UnitAOut);
+    RAM8 (in=in, load=UnitB, address=address[0..2], out=UnitBOut);
+    RAM8 (in=in, load=UnitC, address=address[0..2], out=UnitCOut);
+    RAM8 (in=in, load=UnitD, address=address[0..2], out=UnitDOut);
+    RAM8 (in=in, load=UnitE, address=address[0..2], out=UnitEOut);
+    RAM8 (in=in, load=UnitF, address=address[0..2], out=UnitFOut);
+    RAM8 (in=in, load=UnitG, address=address[0..2], out=UnitGOut);
+    RAM8 (in=in, load=UnitH, address=address[0..2], out=UnitHOut);
+    
+    Mux8Way16 (a=UnitAOut, b=UnitBOut, c=UnitCOut, d=UnitDOut, e=UnitEOut, f=UnitFOut, g=UnitGOut, h=UnitHOut, sel=address[3..5], out=out);
+}
